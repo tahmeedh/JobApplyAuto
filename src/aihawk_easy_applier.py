@@ -330,7 +330,7 @@ class AIHawkEasyApplier:
                 EC.presence_of_element_located((By.CLASS_NAME, 'jobs-easy-apply-content'))
             )
 
-            pb4_elements = easy_apply_content.find_elements(By.CLASS_NAME, 'pb4')
+            pb4_elements = easy_apply_content.find_elements(By.CLASS_NAME, 'jobs-easy-apply-form-section__grouping')
             for element in pb4_elements:
                 self._process_form_element(element, job)
         except Exception as e:
@@ -413,7 +413,9 @@ class AIHawkEasyApplier:
                     logger.debug(f"Resume uploaded from path: {self.resume_path.resolve()}")
                 else:
                     logger.debug("Resume path not found or invalid, generating new resume")
-                    self._create_and_upload_resume(element, job)
+                    # self._create_and_upload_resume(element, job)
+                    next_button = self.driver.find_element(By.CLASS_NAME, "artdeco-button--primary")
+                    next_button.click()
             elif 'cover' in output:
                 logger.debug("Uploading cover letter")
                 self._create_and_upload_cover_letter(element, job)
@@ -640,6 +642,7 @@ class AIHawkEasyApplier:
         radios = question.find_elements(By.CLASS_NAME, 'fb-text-selectable__option')
         if radios:
             question_text = section.text.lower()
+            print("QUESTION:" + question_text)
             options = [radio.text.lower() for radio in radios]
 
             existing_answer = None
@@ -667,6 +670,7 @@ class AIHawkEasyApplier:
         if text_fields:
             text_field = text_fields[0]
             question_text = section.find_element(By.TAG_NAME, 'label').text.lower().strip()
+            print("QUESTION:" + question_text)
             logger.debug(f"Found text field with label: {question_text}")
 
             is_numeric = self._is_numeric_field(text_field)
@@ -719,6 +723,7 @@ class AIHawkEasyApplier:
         if date_fields:
             date_field = date_fields[0]
             question_text = section.text.lower()
+            print("QUESTION:" + question_text)
             answer_date = self.gpt_answerer.answer_question_date()
             answer_text = answer_date.strftime("%Y-%m-%d")
 
@@ -742,7 +747,7 @@ class AIHawkEasyApplier:
     def _find_and_handle_dropdown_question(self, section: WebElement) -> bool:
         try:
             question = section.find_element(By.CLASS_NAME, 'jobs-easy-apply-form-element')
-
+            print("QUESTION:" + question_text)
             dropdowns = question.find_elements(By.TAG_NAME, 'select')
             if not dropdowns:
                 dropdowns = section.find_elements(By.CSS_SELECTOR, '[data-test-text-entity-list-form-select]')
