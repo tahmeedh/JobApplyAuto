@@ -130,7 +130,7 @@ class LinkedInJobManager:
         print(f"TEST - Found INFORMATION {job_list_elements[0].text.split(chr(10))}")
         print(f"TEST - Found INFORMATION {job_list_elements[1].text.split(chr(10))}")
 
-
+#TODO: fix this
         job_list = []
         for job_element in job_list_elements:
             # job_title, company,job_location, link, apply_method = self.extract_job_information_from_tile(job_element)
