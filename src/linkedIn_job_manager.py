@@ -58,7 +58,7 @@ class LinkedInJobManager:
         searches = list(product(self.positions, self.locations))
         random.shuffle(searches)
         page_sleep = 0
-        minimum_time = 60 * 15
+        minimum_time = 60 * 1
         minimum_page_time = time.time() + minimum_time
 
         for position, location in searches:
@@ -103,19 +103,55 @@ class LinkedInJobManager:
 
     def apply_jobs(self):
         try:
+            print("APPLY JOBS 106")
             no_jobs_element = self.driver.find_element(By.CLASS_NAME, 'jobs-search-two-pane__no-results-banner--expand')
             if 'No matching jobs found' in no_jobs_element.text or 'unfortunately, things aren' in self.driver.page_source.lower():
                 raise Exception("No more jobs on this page")
         except NoSuchElementException:
             pass
         
-        job_results = self.driver.find_element(By.CLASS_NAME, "jobs-search-results-list")
-        utils.scroll_slow(self.driver, job_results)
+        print("APPLY JOBS 112")
+        
+        try:
+            job_results = self.driver.find_element(By.XPATH, "//*[@id='main']/div/div[2]/div[1]/div")
+            print("APPLY JOBS 115 - Found job results container")
+        except NoSuchElementException:
+            print("APPLY JOBS 115 - No job results container found")
+            raise Exception("No job results container found on page")
+
+        scrollable_container = self.driver.find_element(By.XPATH, "/html/body/div[5]/div[3]/div[4]/div/div/main/div/div[2]/div[1]/div")
+        utils.scroll_slow(self.driver, scrollable_container)
         utils.scroll_slow(self.driver, job_results, step=300, reverse=True)
-        job_list_elements = self.driver.find_elements(By.CLASS_NAME, 'scaffold-layout__list-container')[0].find_elements(By.CLASS_NAME, 'jobs-search-results__list-item')
-        if not job_list_elements:
-            raise Exception("No job class elements found on page")
-        job_list = [Job(*self.extract_job_information_from_tile(job_element)) for job_element in job_list_elements] 
+
+        job_list_elements = self.driver.find_elements(By.CSS_SELECTOR, "[data-job-id]")
+        print(f"TEST - Found {len(job_list_elements)} job elements")
+        print(f"TEST - Found {job_list_elements}")
+        print(f"TEST - Found {job_list_elements[0]}")
+        print(f"TEST - Found INFORMATION {job_list_elements[0].text.split(chr(10))}")
+        print(f"TEST - Found INFORMATION {job_list_elements[1].text.split(chr(10))}")
+
+
+        job_list = []
+        for job_element in job_list_elements:
+            # job_title, company,job_location, link, apply_method = self.extract_job_information_from_tile(job_element)
+            
+            job_title = job_element.get_attribute('job-card-list__title')
+            company = job_element.get_attribute('data-job-company')
+            job_location = job_element.get_attribute('data-job-location')
+            link = job_element.get_attribute('data-job-link')
+            apply_method = job_element.get_attribute('data-job-apply-method')
+            # Create Job object with only the extracted fields
+            job = Job(
+                title=job_title,
+                company=company,
+                location=job_location,  
+                link=link,
+                apply_method=apply_method
+            )
+            job_list.append(job)
+            
+        print(f"TEST - Created {len(job_list)} job objects")
+ 
         for job in job_list:
             if self.is_blacklisted(job.title, job.company, job.link):
                 utils.printyellow(f"Blacklisted {job.title} at {job.company}, skipping...")
@@ -182,19 +218,25 @@ class LinkedInJobManager:
         self.driver.get(f"https://www.linkedin.com/jobs/search/{self.base_search_url}&keywords={position}{location}&start={job_page * 25}")
     
     def extract_job_information_from_tile(self, job_tile):
+        print(f"TEST - Found {len(job_list_elements)} job elements in extract_job_information_from_tile")
         job_title, company, job_location, apply_method, link = "", "", "", "", ""
+        print(f"TEST - Found {len(job_list_elements)} job elements in extract_job_information_from_tile")
+
         try:
-            job_title = job_tile.find_element(By.CLASS_NAME, 'job-card-list__title').text
-            link = job_tile.find_element(By.CLASS_NAME, 'job-card-list__title').get_attribute('href').split('?')[0]
-            company = job_tile.find_element(By.CLASS_NAME, 'job-card-container__primary-description').text
+            # Get job title and link from the title element
+            title_element = job_tile.find_element(By.CLASS_NAME, 'job-card-list__title')
+            job_title = title_element.text
+            link = title_element.get_attribute('href').split('?')[0]
+        except:
+            pass
+            
+        try:
+            # Get company name
+            company = job_tile.find_element(By.CLASS_NAME, 'artdeco-entity-lockup__subtitle').text
         except:
             pass
         try:
-            job_location = job_tile.find_element(By.CLASS_NAME, 'job-card-container__metadata-item').text
-        except:
-            pass
-        try:
-            apply_method = job_tile.find_element(By.CLASS_NAME, 'job-card-container__apply-method').text
+            apply_method = job_tile.find_element(By.CLASS_NAME, 'job-card-list__footer-wrapper').text
         except:
             apply_method = "Applied"
 

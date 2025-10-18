@@ -19,7 +19,7 @@ def is_scrollable(element):
     client_height = element.get_attribute("clientHeight")
     return int(scroll_height) > int(client_height)
 
-def scroll_slow(driver, scrollable_element, start=0, end=3600, step=100, reverse=False):
+def scroll_slow(driver, scrollable_element, start=0, end=360, step=1000, reverse=False):
     if reverse:
         start, end = end, start
         step = -step
