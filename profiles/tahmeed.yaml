@@ -1,0 +1,71 @@
+# Base resume profile — single source of truth for fixed content.
+# Encorp and Onevest titles/bullets are REWRITTEN per JD by the rule engine (RULE_2).
+# Every other role below is fixed and must never be rewritten (RULE_3).
+
+contact:
+  name: Tahmeed Hossain
+  phone: 604-818-5738
+  email: tahmeedhossain@gmail.com
+  linkedin: linkedin.com/in/tahmeedhossain
+  website: tahmeedhossain.com
+  location: Vancouver, BC
+
+education:
+  institution: University of British Columbia
+  degree: B.Sc. in Computer Science
+  gpa: "3.9"
+  coursework: Software Engineering, Data Structures & Algorithms, Networking, Machine Learning, Operating Systems, Medical Imaging Informatics
+
+certifications: ISTQB Agile Tester | AWS Cloud Practitioner | Google CyberSecurity Certificate | CompTIA+ CyberSecurity | DeepLearning.ai
+
+awards: New Ventures BC — 5th of 300 (2024) | UBC Dean's List (2020–2021) | UBC Hackathon 3rd Place (2020)
+
+experience:
+  # Rewritten per JD — title/bullets filled in by tailor_rules.py
+  - company: Encorp
+    dates: Jan 2024 – Jun 2025
+    title: ""
+    bullets: []
+
+  - company: Global Relay
+    title: Intermediate Software Engineer in Test
+    dates: Jan 2022 – Oct 2024
+    bullets:
+      - Automated E2E and integration testing with WebdriverIO, Selenium, and TypeScript.js to boost test efficiency and coverage by 15%.
+      - Migrated legacy Selenium suite to Playwright, implementing robust E2E and component-level tests with 300+ automated cases, significantly enhancing test speed and reliability.
+      - Designed scalable Page Object Models and simulated endpoints using mock APIs across distributed frontend teams.
+      - Configured and scripted Jenkins CI jobs to automate end-to-end and component-level testing, streamlining the QA pipeline and improving runtime by 75%.
+      - Executed regression and smoke tests for production releases impacting 100K+ users, ensuring high-quality deployments and minimal post-release issues.
+      - Reported, verified, and triaged bugs from nightly Jenkins CI automation runs, ensuring high test coverage and rapid resolution of critical issues.
+
+  # Rewritten per JD — title/bullets filled in by tailor_rules.py
+  - company: Onevest
+    dates: Jun 2021 – Nov 2021
+    title: ""
+    bullets: []
+
+  - company: Alstar Brokerage Solutions
+    title: FullStack Engineer (Part-time)
+    dates: Jan 2021 – Jun 2021
+    bullets:
+      - Developed user-defined stored procedures and optimised complex SQL queries in MSSQL, improving data retrieval speed by 30%.
+      - Built backend services for multiple features in .NET framework and built different user access mode menus.
+      - Spearheaded UI testing and successful MVP deployment across 20+ brokerage clients, ensuring issue-free rollout and gathering critical early-stage feedback.
+
+  - company: OMMATY
+    title: Backend Software Engineer / QA Intern
+    dates: Jan 2020 – Sep 2020
+    bullets:
+      - Developing an iOS/Android application using Flutter, Node.js, and TypeScript.
+      - Designed and implemented backend CRUD operations and dynamic search endpoints using RESTful APIs, enabling seamless client-server interactions.
+      - Developed comprehensive unit tests and validation scripts for backend data logic using Jest, achieving high test coverage and stability.
+      - Built backend services for offer features by crafting SQL queries and defining TypeScript entities, ensuring accurate data flow and business logic.
+
+  - company: Agronome
+    title: Backend Developer Intern
+    dates: May 2019 – Aug 2019
+    bullets:
+      - Configured Docker Compose (ports, images, volumes) to run containers (Postgres database, Node.js backend, React.js frontend).
+      - Implemented elastic search by parsing CSV files and generated crop data based on specific user inputs.
+      - Built data pipelines and development environments using Docker containers and deployment using Digital Ocean droplets.
+      - Used Google Maps API to store farm location and area with 1-1 mapping and created all data storage functionality for the website.

@@ -3,7 +3,12 @@
 **Project:** `jobapply` auto-application bot
 **Agent Role:** JD-to-Resume Keyword Optimizer
 **Owner:** Tahmeed Hossain
-**Stack:** Python (rule engine + PDF generation via ReportLab) + Node.js (docx generation via docx.js) + optional local LLM (Ollama) — **no Claude API / no external API calls**
+**Stack:** Python (rule engine + HTML→PDF via headless Chrome/selenium) + TypeScript career-ops bot integration + optional local LLM (Ollama) — **no Claude API / no external API calls**
+
+> **Status: IMPLEMENTED.** The pipeline described below exists as real code:
+> `agents/tailor_rules.py`, `agents/local_llm.py`, `generators/resume_html.py`,
+> `generators/pdf_generator.py`, `orchestrator.py`, `profiles/tahmeed.yaml`, and
+> the career-ops hook `career-ops/tahmeed/src/core/resumeTailor.ts`.
 
 ---
 
@@ -470,251 +475,101 @@ def export_finetune_jsonl(out_path: str = "./Claude_Resumes/finetune_dataset.jso
 
 ---
 
-## Node.js DOCX Generation (docx.js)
+## PDF Generation (HTML → headless Chrome)
 
-The Node.js pipeline receives the JSON payload and renders it using `docx` npm package, identical to the pattern used in this session.
+Implemented in `generators/resume_html.py` + `generators/pdf_generator.py`.
 
-```javascript
-// resume-generator.js
-const { Document, Packer, Paragraph, TextRun, AlignmentType, BorderStyle, LevelFormat } = require('docx');
-const fs = require('fs');
-
-async function generateDocx(payload, outputPath) {
-  const { meta, contact, summary, skills, experience, 
-          education, certifications, awards } = payload;
-
-  // Build sections using the same pattern as established in this session
-  const children = [];
-
-  // Header
-  children.push(nameHeader(contact.name));
-  children.push(subtitleLine(meta.subtitle));
-  children.push(contactLine(contact));
-
-  // Summary
-  children.push(sectionHeader('Professional Summary'));
-  children.push(para(summary));
-
-  // Skills
-  children.push(sectionHeader('Technical Skills'));
-  skills.forEach(s => children.push(skillRow(s.label, s.value)));
-
-  // Experience
-  children.push(sectionHeader('Work Experience'));
-  experience.forEach(job => {
-    children.push(jobHeader(job.title, job.company, job.dates));
-    job.bullets.forEach(b => children.push(bullet(b)));
-  });
-
-  // Education
-  children.push(sectionHeader('Education'));
-  children.push(educationBlock(education));
-
-  // Certs
-  children.push(sectionHeader('Certifications & Recognition'));
-  children.push(para(certifications));
-  children.push(para(awards));
-
-  const doc = new Document({
-    numbering: { config: [bulletConfig()] },
-    sections: [{ properties: pageProps(), children }]
-  });
-
-  const buffer = await Packer.toBuffer(doc);
-  fs.writeFileSync(outputPath, buffer);
-}
-
-module.exports = { generateDocx };
-```
-
----
-
-## Python PDF Generation (ReportLab)
+- `resume_html.py` renders the ResumePayload to styled HTML. The CSS is copied
+  from `career-ops/tahmeed/generate-resume.mjs` — the proven house style — so
+  tailored resumes look identical to the hand-built one.
+- `pdf_generator.py` prints that HTML to PDF via headless Chrome
+  (`Page.printToPDF` over CDP, using selenium — already a project dependency).
+  Chromedriver resolution mirrors `main.py`’s `init_browser()`: newest cached
+  driver in `~/.cache/selenium`, falling back to webdriver-manager.
+- No LibreOffice, no Node docx step. Both the resume and cover letter PDFs are
+  produced this way (RULE_4).
 
 ```python
-# pdf_generator.py
-from reportlab.lib.pagesizes import letter
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
-from reportlab.lib.units import inch
-from reportlab.lib import colors
-import subprocess
-import os
+from generators.pdf_generator import generate_resume_pdf, generate_cover_letter_pdf
 
-def generate_pdf_via_docx(payload: dict, output_dir: str) -> str:
-    """
-    Strategy: Generate DOCX via Node.js subprocess, then convert to PDF via LibreOffice.
-    This matches the proven pattern from this session.
-    """
-    filename_base = payload['meta']['filename_base']
-    docx_path = os.path.join(output_dir, f"{filename_base}.docx")
-    pdf_path = os.path.join(output_dir, f"{filename_base}.pdf")
-    
-    # Write payload to temp JSON for Node.js to consume
-    import json, tempfile
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
-        json.dump(payload, f)
-        payload_path = f.name
-    
-    # Call Node.js generator
-    subprocess.run([
-        'node', 'resume-generator.js', payload_path, docx_path
-    ], check=True)
-    
-    # Convert DOCX → PDF via LibreOffice (same as this session)
-    subprocess.run([
-        'soffice', '--headless', '--convert-to', 'pdf',
-        '--outdir', output_dir, docx_path
-    ], check=True)
-    
-    return pdf_path
-
-
-def generate_cover_letter_pdf(payload: dict, output_dir: str) -> str:
-    """Generate cover letter PDF from payload cover_letter paragraphs."""
-    filename_base = payload['meta']['filename_base']
-    cl_path = os.path.join(output_dir, f"{filename_base}_CoverLetter.pdf")
-    
-    doc = SimpleDocTemplate(cl_path, pagesize=letter,
-                            leftMargin=inch, rightMargin=inch,
-                            topMargin=inch, bottomMargin=inch)
-    
-    styles = getSampleStyleSheet()
-    body_style = ParagraphStyle('body', fontName='Helvetica', fontSize=11,
-                                leading=16, spaceAfter=12)
-    
-    story = []
-    contact = payload['contact']
-    meta = payload['meta']
-    
-    # Header
-    story.append(Paragraph(f"<b>{contact['name']}</b>", styles['Title']))
-    story.append(Paragraph(
-        f"{contact['email']} | {contact['phone']} | {contact['location']}",
-        styles['Normal']))
-    story.append(Spacer(1, 0.3*inch))
-    story.append(Paragraph(f"Re: {meta['role']} — {meta['company']}", body_style))
-    story.append(Spacer(1, 0.2*inch))
-    
-    for para_text in payload.get('cover_letter', {}).get('paragraphs', []):
-        story.append(Paragraph(para_text, body_style))
-    
-    story.append(Spacer(1, 0.3*inch))
-    story.append(Paragraph(f"Sincerely,<br/>{contact['name']}", body_style))
-    
-    doc.build(story)
-    return cl_path
+resume_pdf = generate_resume_pdf(payload, output_dir)        # <base>.pdf
+cl_pdf = generate_cover_letter_pdf(payload, output_dir)      # <base>_CoverLetter.pdf
 ```
 
 ---
 
 ## Orchestrator (main entry point)
 
-Every run generates a **new resume** and stores it (plus cover letter and payload JSON) in `Claude_Resumes/`, so the corpus grows with each application.
+Implemented in `orchestrator.py`. Every run generates a **new resume** and
+stores it (plus cover letter and payload JSON) in `Claude_Resumes/`, so the
+corpus grows with each application.
 
-```python
-# orchestrator.py
-import sys
-import json
-from agents.tailor_rules import tailor_resume, extract_keywords
-from agents.local_llm import polish_with_local_llm
-from pdf_generator import generate_pdf_via_docx, generate_cover_letter_pdf
+```bash
+python orchestrator.py <jd_file> "<Company>" "<Role>" [--output-dir DIR] [--no-cover-letter] [--no-llm]
+```
 
-OUTPUT_DIR = "./Claude_Resumes"   # archive + local-LLM corpus (RULE_7)
+Pipeline: JD → `tailor_rules.tailor_resume()` → optional
+`local_llm.polish_with_local_llm()` (auto-skipped when Ollama is absent) →
+payload JSON + resume PDF + cover letter PDF in `Claude_Resumes/`.
 
-def run(job_description: str, company: str, role: str, output_dir: str = OUTPUT_DIR):
-    """Full pipeline: JD → rules → (optional local LLM polish) → DOCX + PDF + Cover Letter"""
+The **last stdout line** is a machine-readable trailer so callers can parse
+the generated paths reliably:
 
-    filename_base = f"TahmeedHossain_{company.replace(' ', '')}_{role.replace(' ', '')}"
-
-    print(f"[1/4] Extracting JD keywords and applying tailoring rules for {role} at {company}...")
-    payload = tailor_resume(
-        job_description=job_description,
-        company=company,
-        role=role,
-        filename_base=filename_base,
-        generate_cover_letter=True
-    )
-
-    print("[2/4] Optional local LLM polish (skipped automatically if Ollama absent)...")
-    payload = polish_with_local_llm(payload, extract_keywords(job_description))
-
-    # Save JSON payload next to the resume — same folder feeds the corpus
-    with open(f"{output_dir}/{filename_base}_payload.json", "w") as f:
-        json.dump(payload, f, indent=2)
-
-    print("[3/4] Generating resume PDF...")
-    resume_pdf = generate_pdf_via_docx(payload, output_dir)
-    print(f"  → {resume_pdf}")
-
-    print("[4/4] Generating cover letter PDF...")
-    cl_pdf = generate_cover_letter_pdf(payload, output_dir)
-    print(f"  → {cl_pdf}")
-
-    return {"resume": resume_pdf, "cover_letter": cl_pdf, "payload": payload}
-
-
-if __name__ == "__main__":
-    # Example usage
-    jd = open(sys.argv[1]).read()
-    company = sys.argv[2]
-    role = sys.argv[3]
-    result = run(jd, company, role)
-    print(json.dumps(result, indent=2))
+```
+RESULT_JSON:{"resume": "...pdf", "cover_letter": "...pdf", "payload_json": "...json"}
 ```
 
 ---
 
-## Integration with jobapply Playwright Bot
+## Integration with the career-ops Playwright Bot (IMPLEMENTED)
 
-In your existing `jobapply` bot, add a pre-fill step before the Playwright ATS interaction:
+The career-ops bot now attaches the tailored resume automatically.
+`career-ops/tahmeed/src/core/resumeTailor.ts` spawns the orchestrator and
+parses the `RESULT_JSON:` trailer; `applicationFlow.ts` calls it per job with
+the JD text already scraped from the posting page, then overrides
+`profile.resumePath` so `universalFiller.ts` uploads the tailored PDF instead
+of the static `data/resume.pdf`:
 
-```python
-# In your jobapply bot flow
-from orchestrator import run as tailor_and_generate
-
-async def apply_to_job(job_url: str, job_description: str, company: str, role: str):
-    
-    # Step 1: Tailor resume via rules and generate PDFs into Claude_Resumes/
-    result = tailor_and_generate(job_description, company, role)
-    resume_pdf_path = result["resume"]
-    cover_letter_pdf_path = result["cover_letter"]
-    
-    # Step 2: Human review checkpoint (your existing pattern)
-    print(f"\n=== HUMAN REVIEW REQUIRED ===")
-    print(f"Resume: {resume_pdf_path}")
-    print(f"Cover Letter: {cover_letter_pdf_path}")
-    input("Press Enter to proceed with submission, or Ctrl+C to abort...")
-    
-    # Step 3: Playwright ATS submission (your existing bot)
-    async with async_playwright() as p:
-        browser = await p.chromium.connect_over_cdp("http://localhost:9222")
-        # ... existing Playwright logic to upload PDFs and fill ATS fields
-        await upload_file(page, resume_pdf_path, selector="#resume-upload")
-        await upload_file(page, cover_letter_pdf_path, selector="#cover-letter-upload")
+```ts
+// src/flows/applicationFlow.ts (inside run(), before platform.apply)
+let profileForJob = this.profile;
+try {
+  const tailoredResume = await generateTailoredResume(job, pageText, this.logger);
+  if (tailoredResume) {
+    profileForJob = { ...this.profile, resumePath: tailoredResume };
+  }
+} catch (error) {
+  this.logger.warn(`Resume tailoring failed, using static resume: ...`);
+}
+const result = await platform.apply(page, job, profileForJob, this.dryRun);
 ```
+
+Failure handling: if `orchestrator.py` is missing, the JD is too short
+(< 200 chars), the spawn fails, or the PDF doesn’t materialise, the bot logs a
+warning and falls back to the static resume — an application is never blocked
+by tailoring.
 
 ---
 
 ## File Structure
 
 ```
-jobapply/
+JobAutoApply/
 ├── agents/
 │   ├── tailor_rules.py        # Rule engine: keywords, titles, bullet bank
-│   ├── local_llm.py           # Optional Ollama polish + corpus tooling
-│   └── RESUME_TAILOR_AGENT.md # This document
+│   └── local_llm.py           # Optional Ollama polish + corpus tooling
 ├── generators/
-│   ├── resume-generator.js    # Node.js DOCX builder
-│   └── pdf_generator.py       # Python PDF/cover letter builder
-├── orchestrator.py            # Main pipeline entry point
-├── bot/
-│   └── apply.py               # Existing Playwright ATS bot
+│   ├── resume_html.py         # Payload → styled HTML (house CSS)
+│   └── pdf_generator.py       # HTML → PDF via headless Chrome
+├── orchestrator.py            # Main pipeline entry point (CLI)
 ├── profiles/
-│   └── tahmeed.yaml           # Base profile YAML (contact, certs, fixed role bullets)
+│   └── tahmeed.yaml           # Base profile (contact, certs, fixed role bullets)
 ├── Claude_Resumes/            # ALL generated resumes/cover letters/payloads land here
-│                              # + reference/training corpus for the local LLM
-└── jds/                       # Scraped job descriptions
+│                              # + reference/training corpus for the local LLM (gitignored)
+├── RESUME_TAILOR_AGENT.md     # This document
+└── career-ops/tahmeed/src/
+    ├── core/resumeTailor.ts   # Spawns orchestrator, parses RESULT_JSON
+    └── flows/applicationFlow.ts  # Per-job resumePath override (wired)
 ```
 
 ---
@@ -722,19 +577,21 @@ jobapply/
 ## Quick Start
 
 ```bash
-# Install dependencies (no anthropic SDK — no API keys needed)
-pip install reportlab pypdf python-docx
-npm install docx
-# Optional local LLM polish:
-#   install Ollama from https://ollama.com, then: ollama pull llama3.1
+# Dependencies are already in requirements.txt (selenium, webdriver-manager,
+# PyYAML). Optional extras:
+pip install pypdf python-docx        # only needed for local-LLM corpus extraction
+# Optional local LLM polish: install Ollama, then: ollama pull llama3.1
 
 # Tailor and generate for a single JD file
 python orchestrator.py ./jds/jetbrains_qa.txt "JetBrains" "QA Engineer"
 
 # Output (all in Claude_Resumes/):
-# ./Claude_Resumes/TahmeedHossain_JetBrains_QAEngineer.pdf
-# ./Claude_Resumes/TahmeedHossain_JetBrains_QAEngineer_CoverLetter.pdf
-# ./Claude_Resumes/TahmeedHossain_JetBrains_QAEngineer_payload.json
+# Claude_Resumes/TahmeedHossain_JetBrains_QAEngineer.pdf
+# Claude_Resumes/TahmeedHossain_JetBrains_QAEngineer_CoverLetter.pdf
+# Claude_Resumes/TahmeedHossain_JetBrains_QAEngineer_payload.json
+
+# The career-ops bot picks it up automatically — run it as usual:
+cd career-ops/tahmeed && node --loader ts-node/esm src/index.ts --headed
 ```
 
 ---
@@ -746,5 +603,5 @@ python orchestrator.py ./jds/jetbrains_qa.txt "JetBrains" "QA Engineer"
 - RULE_6 check: after building the payload, assert every extracted JD keyword appears in the serialized payload; log any that were dropped
 - `Claude_Resumes/` is both the output folder and the local-LLM corpus — every new application makes retrieval/fine-tuning better; run `export_finetune_jsonl()` periodically to refresh the training dataset
 - The payload JSON is the single source of truth — it is saved alongside each resume so you can regenerate PDFs without re-running the rules
-- For the DOCX → PDF conversion, LibreOffice (`soffice --headless`) is the proven converter from this session
+- PDFs are rendered by headless Chrome (`Page.printToPDF`) — the same engine the career-ops `generate-resume.mjs` uses, so output matches the house style exactly
 - The cover letter paragraphs are template-driven (opening, why-this-company, core-skills-with-JD-keywords, closing) — 4 paragraphs, keywords injected the same way as bullets

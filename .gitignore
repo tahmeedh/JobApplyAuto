@@ -13,3 +13,5 @@ chrome_profile
 answers.json
 data*
 *virtual
+# Generated tailored resumes (personal data, also the local-LLM corpus)
+Claude_Resumes/
