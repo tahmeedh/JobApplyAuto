@@ -70,10 +70,13 @@ TECH_KEYWORDS = {
     "Ansible": ["ansible"],
 }
 
-# CamelCase heuristic stoplist — common JD words that look like tool names
+# CamelCase heuristic stoplist — common JD/web-page words that look like tool names
 _HEURISTIC_STOPWORDS = {
     "JavaScript", "TypeScript", "GitHub", "GitLab", "LinkedIn", "PowerPoint",
     "MacBook", "YouTube", "WhatsApp", "FullStack", "FrontEnd", "BackEnd",
+    # scraped-page junk (the bot passes full page text, not just the JD)
+    "ApplyTo", "QuickApply", "AutoFill", "MyGreenhouse", "SmartApply", "EasyApply",
+    "DriveEnter", "DropboxGoogle", "LinkedInApply", "CoverLetter",
 }
 
 
@@ -95,10 +98,12 @@ def extract_keywords(jd: str) -> "list[str]":
 
     known = {kw for _, kw in found}
     # Heuristic: capture CamelCase tool names not in the dictionary
-    # (e.g. "TestRail", "DataDog") so nothing relevant is missed.
+    # (e.g. "TestRail", "DataDog") so nothing relevant is missed. Requires
+    # >=2 occurrences — one-off tokens are usually page noise, not skills.
     for m in re.finditer(r"\b([A-Z][a-z]+[A-Z][A-Za-z]+)\b", jd):
         token = m.group(1)
-        if token not in known and token not in _HEURISTIC_STOPWORDS:
+        if (token not in known and token not in _HEURISTIC_STOPWORDS
+                and len(re.findall(rf"\b{re.escape(token)}\b", jd)) >= 2):
             known.add(token)
             found.append((m.start(), token))
 
@@ -327,14 +332,18 @@ def tailor_resume(job_description: str, company: str, role: str,
                    if k.lower() not in company.lower().replace(" ", "")]
     family = detect_role_family(role, job_description)
 
+    # Subtitle and summary only use dictionary-verified keywords; heuristic
+    # tokens (unknown CamelCase words) are kept for skills/RULE_6 only
+    dict_keywords = [k for k in jd_keywords if k in TECH_KEYWORDS]
+
     payload = load_base_profile()
     payload["meta"] = {
         "company": company,
         "role": role,
         "filename_base": filename_base,
-        "subtitle": (f"{role} — {', '.join(jd_keywords[:3])}" if jd_keywords else role),
+        "subtitle": (f"{role} — {', '.join(dict_keywords[:3])}" if dict_keywords else role),
     }
-    payload["summary"] = build_summary(role, family, jd_keywords)
+    payload["summary"] = build_summary(role, family, dict_keywords)
     payload["skills"] = build_skills(jd_keywords)
 
     for job in payload["experience"]:
@@ -347,7 +356,7 @@ def tailor_resume(job_description: str, company: str, role: str,
         # all other companies untouched — RULE_3
 
     if generate_cover_letter:
-        payload["cover_letter"] = build_cover_letter(company, role, jd_keywords,
+        payload["cover_letter"] = build_cover_letter(company, role, dict_keywords,
                                                      cover_letter_notes)
 
     missed = verify_keywords_landed(payload, jd_keywords)
